@@ -10,14 +10,34 @@ Collections:
 from datetime import datetime, timezone
 
 from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
 
 from word_duel.config import MONGO_DB_NAME, MONGO_URI
 
-_client = MongoClient(MONGO_URI)
+_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=15000)
 _db = _client[MONGO_DB_NAME]
 
 games_col = _db["games"]
 pending_col = _db["pending_setup"]
+
+
+def ping():
+    """Verify MongoDB is reachable (local or Atlas). Raises on failure."""
+    _client.admin.command("ping")
+
+
+def check_connection():
+    try:
+        ping()
+    except ServerSelectionTimeoutError as exc:
+        raise RuntimeError(
+            "Cannot reach MongoDB Atlas.\n"
+            "Common fixes:\n"
+            "  1. Atlas → Network Access → Add IP Address → Allow Access from Anywhere (0.0.0.0/0)\n"
+            "  2. If VPN is ON, turn it OFF (VPN often blocks Atlas) or add the VPN IP in Atlas\n"
+            "  3. Atlas → Database → check cluster is not Paused (free tier sleeps when idle)\n"
+            "  4. Wait 1–2 min after waking a paused cluster, then try again"
+        ) from exc
 
 
 def now():

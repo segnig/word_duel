@@ -25,33 +25,54 @@ and copy in `texts.py`.
 
 ## Setup
 
-1. **MongoDB** — have a MongoDB instance reachable (local install, Docker,
-   or Atlas free tier all work):
-   ```bash
-   docker run -d -p 27017:27017 --name word-duel-mongo mongo
-   ```
+### 1. MongoDB Atlas (recommended)
 
-2. **Bot token** — message [@BotFather](https://t.me/BotFather) on Telegram,
-   run `/newbot`, and copy the token.
+1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) and create a free account.
+2. Create a **free cluster** (M0).
+3. **Database Access** → Add user → set username + password (save the password).
+4. **Network Access** → Add IP Address:
+   - For development: **Allow Access from Anywhere** (`0.0.0.0/0`)
+   - For production: add your server's IP only.
+5. **Database** → **Connect** → **Drivers** → copy the connection string.
+6. Replace `<password>` with your user's password (URL-encode special chars like `@` → `%40`).
 
-3. **Inline mode (required, like @xoBot)** — in BotFather:
-   - `/setinline` → enable, placeholder e.g. `Play Word Duel…`
-   - `/setinlinefeedback` → Enable (so the bot can attach the game to the sent message)
+### 2. Bot token
 
-4. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+Message [@BotFather](https://t.me/BotFather) on Telegram, run `/newbot`, and copy the token.
 
-5. **Set environment variables and run:**
-   ```bash
-   export BOT_TOKEN="123456:ABC-your-token"
-   export MONGO_URI="mongodb://localhost:27017"   # optional, this is the default
-   python bot.py
-   ```
+### 3. Inline mode (required, like @xoBot)
 
-   Copy `.env.example` if you prefer a local env file (load it yourself, or
-   export the variables). You can also run `python -m word_duel`.
+In BotFather:
+- `/setinline` → enable, placeholder e.g. `CRANE or 6 MONKEY`
+- `/setinlinefeedback` → **Enable**
+
+### 4. Install and configure
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```bash
+BOT_TOKEN=123456:ABC-your-telegram-token
+MONGO_URI=mongodb+srv://myuser:mypassword@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+MONGO_DB_NAME=word_duel
+```
+
+### 5. Run
+
+```bash
+python bot.py
+```
+
+You should see `MongoDB connected (Atlas)` then the bot starts polling.
+
+**Local MongoDB instead?** Use `MONGO_URI=mongodb://localhost:27017` or Docker:
+```bash
+docker run -d -p 27017:27017 --name word-duel-mongo mongo
+```
 
 ## Playing
 
