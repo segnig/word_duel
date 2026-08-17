@@ -78,7 +78,7 @@ def role_for_user(game, user_id):
     return None
 
 
-def start_game(chat_id, user, word_length=None):
+def start_game(chat_id, user, word_length=None, host_word=None):
     existing = db.get_game(chat_id)
     if existing and existing["status"] != STATUS_FINISHED:
         raise DuelError(texts.game_already_active())
@@ -88,8 +88,14 @@ def start_game(chat_id, user, word_length=None):
 
     game = db.create_game(chat_id, word_length, DEFAULT_MAX_ROUNDS)
     game["players"][ROLE_A] = _new_player(user)
+    if host_word:
+        host_word = normalize_word(host_word)
+        if not is_valid_word(host_word, word_length):
+            raise DuelError(texts.invalid_word(word_length))
+        game["players"][ROLE_A]["secret_word"] = host_word
+    else:
+        db.set_pending(user.id, chat_id, ROLE_A)
     db.save_game(game)
-    db.set_pending(user.id, chat_id, ROLE_A)
     return game
 
 
@@ -205,6 +211,8 @@ def _require_player(game, user):
     role = role_for_user(game, user.id)
     if not role:
         raise DuelError("You're not in this game.")
+    if user.first_name:
+        game["players"][role]["name"] = user.first_name
     return role
 
 
@@ -268,6 +276,9 @@ def confirm_draft(game, user):
 
     if game["status"] != STATUS_IN_PROGRESS:
         raise DuelError("This game is over. Tap Play again.")
+
+    if not is_valid_word(draft, game["word_length"]):
+        raise DuelError(f"Need {game['word_length']} letters.")
 
     result = make_guess(game, user, draft)
     result.game.setdefault("drafts", {})[role] = ""

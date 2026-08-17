@@ -40,7 +40,8 @@ def render_card(game):
             lines.append("Waiting for an opponent — tap Join.")
             host = game["players"][ROLE_A]
             if host.get("secret_word"):
-                lines.append(f"{host['name']}: ready ✓")
+                lines.append(f"{host['name']}: secret word set ✓")
+                lines.append("Opponent joins, sets their word, then you guess each other.")
             else:
                 lines.append(f"{host['name']}: tap letters to set your secret word, then ✓")
         else:

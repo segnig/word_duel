@@ -1,36 +1,62 @@
-from telegram import InlineQueryResultArticle, InputTextMessageContent, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent, Update
 from telegram.ext import ContextTypes
 
-from word_duel.config import DEFAULT_WORD_LENGTH
-from word_duel.constants import MAX_WORD_LENGTH, MIN_WORD_LENGTH
-from word_duel import duel
+from word_duel import db, duel
 from word_duel.card import render_card
-from word_duel.keyboards import game_keyboard, join_keyboard
+from word_duel.constants import ROLE_A
+from word_duel.game_logic import normalize_word
+from word_duel.inline_query import parse_inline_query
+from word_duel.keyboards import game_keyboard
 
 
-def _length_from_query(text):
-    raw = (text or "").strip()
-    if raw.isdigit():
-        value = int(raw)
-        if MIN_WORD_LENGTH <= value <= MAX_WORD_LENGTH:
-            return value
-    return DEFAULT_WORD_LENGTH
+def _join_callback(host_id, length, host_word=None):
+    data = f"join:{host_id}:{length}"
+    if host_word:
+        data = f"{data}:{host_word}"
+    return data
 
 
 async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query
-    length = _length_from_query(query.query)
-    title = f"Word Duel ({length} letters)"
+    length, host_word, error = parse_inline_query(query.query)
+
+    if error:
+        await query.answer(
+            [
+                InlineQueryResultArticle(
+                    id="error",
+                    title="Invalid game",
+                    description=error,
+                    input_message_content=InputTextMessageContent(f"❌ {error}"),
+                )
+            ],
+            cache_time=0,
+            is_personal=True,
+        )
+        return
+
+    if host_word:
+        title = f"Word Duel · {host_word} ({length} letters)"
+        description = "Your word is set. Friend joins and tries to guess yours."
+        preview = f"🎮 Word Duel · {length} letters\n\nHost word is set. Tap Join to play."
+    else:
+        title = f"Word Duel ({length} letters)"
+        description = "Or type CRANE / 6 MONKEY to set your secret word now."
+        preview = f"🎮 Word Duel · {length} letters\n\nWaiting to start…"
+
     await query.answer(
         [
             InlineQueryResultArticle(
-                id=f"duel-{length}",
+                id=f"duel-{length}-{host_word or ''}",
                 title=title,
-                description="Send a game to this chat. Opponent taps Join, then play on the buttons.",
-                input_message_content=InputTextMessageContent(
-                    f"🎮 Word Duel · {length} letters\n\nWaiting to start…"
-                ),
-                reply_markup=join_keyboard(),
+                description=description,
+                input_message_content=InputTextMessageContent(preview),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "Join game",
+                        callback_data=_join_callback(query.from_user.id, length, host_word),
+                    )]
+                ]),
             )
         ],
         cache_time=0,
@@ -44,17 +70,21 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
     if not inline_id:
         return
 
-    length = DEFAULT_WORD_LENGTH
-    if chosen.result_id.startswith("duel-"):
-        try:
-            length = int(chosen.result_id.split("-", 1)[1])
-        except ValueError:
-            pass
+    length, host_word, _ = parse_inline_query(chosen.query)
 
     game_id = f"inline:{inline_id}"
-    game = duel.start_game(game_id, chosen.from_user, length)
+    game = db.get_game(game_id)
+    if not game:
+        game = duel.start_game(game_id, chosen.from_user, length, host_word=host_word)
+    else:
+        role = duel.role_for_user(game, chosen.from_user.id)
+        if role:
+            game["players"][role]["name"] = chosen.from_user.first_name
+        if host_word and not game["players"][ROLE_A].get("secret_word"):
+            word = normalize_word(host_word)
+            if len(word) == game["word_length"]:
+                game["players"][ROLE_A]["secret_word"] = word
     game["inline_message_id"] = inline_id
-    from word_duel import db
     db.save_game(game)
 
     await context.bot.edit_message_text(

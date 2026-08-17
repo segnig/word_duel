@@ -1,8 +1,12 @@
+from types import SimpleNamespace
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from word_duel import db, duel, texts
 from word_duel.card import format_draft
+from word_duel.config import DEFAULT_WORD_LENGTH
+from word_duel.constants import ROLE_A, ROLE_B
 from word_duel.handlers.card import game_id_from_query, refresh_card
 
 
@@ -11,6 +15,37 @@ async def _load_game(query):
     if game_id is None:
         return None
     return db.get_game(game_id)
+
+
+def _parse_join(data):
+    if data == "join":
+        return None, DEFAULT_WORD_LENGTH, None
+    parts = data.split(":")
+    host_id = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else None
+    length = DEFAULT_WORD_LENGTH
+    if len(parts) > 2 and parts[2].isdigit():
+        length = int(parts[2])
+    host_word = parts[3].upper() if len(parts) > 3 else None
+    return host_id, length, host_word
+
+
+async def _ensure_inline_game(query, data):
+    """Create the inline game if ChosenInlineResult hasn't landed yet."""
+    game = await _load_game(query)
+    if game or not query.inline_message_id:
+        return game
+    host_id, length, host_word = _parse_join(data)
+    if host_id is None:
+        host_id = query.from_user.id
+    game_id = f"inline:{query.inline_message_id}"
+    if query.from_user.id == host_id:
+        host = query.from_user
+    else:
+        host = SimpleNamespace(id=host_id, first_name="Player")
+    game = duel.start_game(game_id, host, length, host_word=host_word)
+    game["inline_message_id"] = query.inline_message_id
+    db.save_game(game)
+    return game
 
 
 async def handle_join(query, game):
@@ -84,11 +119,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data or ""
     game = await _load_game(query)
+    if not game and (data == "join" or data.startswith("join:")):
+        try:
+            game = await _ensure_inline_game(query, data)
+        except duel.DuelError as exc:
+            await query.answer(exc.message, show_alert=True)
+            return
     if not game:
         await query.answer("No active game. Send a new one with @bot or /newduel.", show_alert=True)
         return
 
-    if data == "join":
+    if data == "join" or data.startswith("join:"):
+        if (
+            duel.role_for_user(game, query.from_user.id) == ROLE_A
+            and ROLE_B not in game["players"]
+        ):
+            game["players"][ROLE_A]["name"] = query.from_user.first_name
+            db.save_game(game)
+            await query.answer("Waiting for an opponent.")
+            await refresh_card(game, query=query)
+            return
         await handle_join(query, game)
     elif data.startswith("l:") and len(data) == 3:
         await handle_letter(query, game, data[2])

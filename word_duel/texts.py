@@ -4,9 +4,12 @@
 def start_help(bot_username="wordduelbot"):
     return (
         "👋 Word Duel works like @xoBot: one message, tap buttons.\n\n"
-        f"In any chat, type @{bot_username} and send a Word Duel.\n"
-        "Your friend taps Join, then both of you play on the letter buttons.\n"
-        "Secret words stay hidden — only you see them in a popup.\n\n"
+        f"In any chat, type @{bot_username} and:\n"
+        "• `CRANE` — 5-letter game, your word is CRANE\n"
+        "• `6 MONKEY` — 6-letter game, your word is MONKEY\n"
+        "• `6` — 6-letter game, pick word on buttons\n\n"
+        "Your friend taps Join, sets their word, then you take turns guessing.\n"
+        "Secret words stay hidden — only you see yours in a popup.\n\n"
         "Or add me to a group and send /newduel."
     )
 

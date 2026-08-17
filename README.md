@@ -14,9 +14,9 @@ word_duel/
   duel.py                  # game flow (start, join, guess, cancel)
   game_logic.py            # Wordle scoring / word validation
   db.py                    # MongoDB access
-  texts.py                 # user-facing copy
-  keyboards.py             # inline buttons
-  handlers/                # Telegram command / callback / DM handlers
+  card.py                   # one-message game board (xoBot-style)
+  keyboards.py             # join + letter pad
+  handlers/                # commands, callbacks, inline, DM
 docs/design.md             # game design
 ```
 
@@ -34,12 +34,16 @@ and copy in `texts.py`.
 2. **Bot token** — message [@BotFather](https://t.me/BotFather) on Telegram,
    run `/newbot`, and copy the token.
 
-3. **Install dependencies:**
+3. **Inline mode (required, like @xoBot)** — in BotFather:
+   - `/setinline` → enable, placeholder e.g. `Play Word Duel…`
+   - `/setinlinefeedback` → Enable (so the bot can attach the game to the sent message)
+
+4. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Set environment variables and run:**
+5. **Set environment variables and run:**
    ```bash
    export BOT_TOKEN="123456:ABC-your-token"
    export MONGO_URI="mongodb://localhost:27017"   # optional, this is the default
@@ -51,18 +55,22 @@ and copy in `texts.py`.
 
 ## Playing
 
-1. Add the bot to a **group chat** and make it admin with **Delete messages**
-   so it can hide secret words. In [@BotFather](https://t.me/BotFather) run
-   `/setprivacy` → Disable so the bot can see typed words (not only commands).
-2. In the group: `/newduel` (optionally `/newduel 6` for a 6-letter word).
-3. Second player taps **Join game**.
-4. Both players set a secret word **in the group**: `/word CRANE`
-   (the bot deletes that message). You can also type the word, or DM it.
-5. Once both words are in, guess **in the group**: type `HOUSE` on your turn
-   or use `/guess HOUSE`. The bot posts color-coded feedback.
-6. First exact match wins. If both players use all their guesses
-   (10 by default) with no winner, it's a draw and both words are revealed.
-7. `/cancel` lets either player abandon an in-progress game.
+Works like [@xoBot](https://t.me/xoBot): one message, tap buttons. No need to
+type guesses in the chat.
+
+1. Open the bot and tap **Play in a chat**, or in any chat type
+   `@YourBot` followed by your word:
+   - `@YourBot CRANE` — 5 letters, your secret word is CRANE
+   - `@YourBot 6 MONKEY` — 6 letters, your word is MONKEY
+   - `@YourBot 6` — 6 letters, pick your word on the buttons
+2. Your friend taps **Join game** on that message.
+3. Friend sets their secret word on the letter buttons, then **✓**.
+4. Take turns tapping a guess + **✓**. The same message updates with
+   Wordle-style colors.
+5. First exact match wins. **Play again** starts a rematch with the same two players.
+
+You can also add the bot to a group and send `/newduel` (or `/newduel 6`).
+`/cancel` or the Cancel button abandons a game.
 
 ## Notes / things you may want to extend
 
@@ -72,9 +80,5 @@ and copy in `texts.py`.
 - **Timeouts**: there's no auto-forfeit for an inactive player yet — you'd
   add a `last_action_at` timestamp to the game doc and a periodic job
   (`JobQueue` in python-telegram-bot) to check it.
-- **Rematch button**: `/newduel` right after a finished game works today;
-  a one-tap "Play again" button reusing the same two players would wrap
-  `duel.start_game`.
-- **Scaling to many concurrent games**: this already supports one game per
-  chat concurrently since games are keyed by `chat_id` in Mongo — no changes
-  needed for many *groups* to play simultaneously.
+- **Scaling**: group games are keyed by `chat_id`; inline games are keyed by
+  the inline message, so many chats can play at once.
