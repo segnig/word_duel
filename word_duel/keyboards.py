@@ -2,11 +2,12 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from word_duel.constants import MODE_SOLO, ROLE_B, STATUS_FINISHED, STATUS_IN_PROGRESS, STATUS_SETUP
 
-# 3 compact letter rows (A–Z) + 1 action row.
+# Exactly 4 rows: 3 of letters, last row is V–Z plus actions.
 LETTER_ROWS = [
-    list("ABCDEFGHI"),
-    list("JKLMNOPQR"),
-    list("STUVWXYZ"),
+    list("ABCDEFG"),
+    list("HIJKLMN"),
+    list("OPQRSTU"),
+    list("VWXYZ"),
 ]
 
 
@@ -34,7 +35,7 @@ def _letter_rows(include_hint=False):
         InlineKeyboardButton("Enter", callback_data="ok"),
         InlineKeyboardButton("✕", callback_data="x"),
     ])
-    rows.append(actions)
+    rows[-1].extend(actions)
     return rows
 
 
