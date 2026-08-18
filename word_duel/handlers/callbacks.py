@@ -7,6 +7,7 @@ from word_duel import db, duel, texts
 from word_duel.card import format_draft
 from word_duel.config import DEFAULT_WORD_LENGTH
 from word_duel.constants import ROLE_A, ROLE_B
+from word_duel.html import PARSE_MODE
 from word_duel.handlers.card import game_id_from_query, refresh_card
 
 
@@ -91,8 +92,39 @@ async def handle_confirm(query, game):
         await refresh_card(result.game, query=query)
         return
 
-    await query.answer("Guess posted.")
+    if result.kind == "reply":
+        await query.answer("Correct! Opponent gets an equal chance.")
+    elif result.kind == "win":
+        winner = result.game["players"][result.game["winner"]]
+        if winner["user_id"] == query.from_user.id:
+            await query.answer("That's the word — you win!")
+        else:
+            await query.answer(f"{winner['name']} wins — they found the word.")
+    elif result.kind == "draw":
+        await query.answer("It's a draw!")
+    else:
+        await query.answer("Guess posted.")
     await refresh_card(result.game, query=query)
+
+
+async def handle_hint(query, game):
+    try:
+        hint = duel.use_hint(game, query.from_user)
+    except duel.DuelError as exc:
+        await query.answer(exc.message, show_alert=True)
+        return
+    await query.answer(
+        texts.hint_popup(hint.position, hint.letter, hint.used, hint.remaining),
+        show_alert=True,
+    )
+
+
+async def handle_help(query):
+    if query.message:
+        await query.answer()
+        await query.message.reply_text(texts.how_to_play(), parse_mode=PARSE_MODE)
+        return
+    await query.answer("Open the bot and send /start for how to play.", show_alert=True)
 
 
 async def handle_cancel_button(query, game):
@@ -101,8 +133,8 @@ async def handle_cancel_button(query, game):
     except duel.DuelError as exc:
         await query.answer(exc.message, show_alert=True)
         return
-    await query.answer("Game cancelled.")
-    await query.edit_message_text(texts.game_cancelled())
+    await query.answer("Game ended.")
+    await query.edit_message_text("✕  Game ended.")
 
 
 async def handle_rematch(query, game):
@@ -111,13 +143,16 @@ async def handle_rematch(query, game):
     except duel.DuelError as exc:
         await query.answer(exc.message, show_alert=True)
         return
-    await query.answer("New duel — set your secret words.")
+    await query.answer("Rematch — lock your secret words.")
     await refresh_card(game, query=query)
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data or ""
+    if data == "help":
+        await handle_help(query)
+        return
     game = await _load_game(query)
     if not game and (data == "join" or data.startswith("join:")):
         try:
@@ -146,6 +181,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_backspace(query, game)
     elif data == "ok":
         await handle_confirm(query, game)
+    elif data == "hint":
+        await handle_hint(query, game)
     elif data == "x":
         await handle_cancel_button(query, game)
     elif data == "again":

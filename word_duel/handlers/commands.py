@@ -1,4 +1,4 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import ContextTypes
 
 from word_duel import db, duel, texts
@@ -11,15 +11,17 @@ from word_duel.handlers.common import (
     reply_guess_result,
     try_hide_message,
 )
-from word_duel.keyboards import game_keyboard
+from word_duel.html import PARSE_MODE
+from word_duel.keyboards import game_keyboard, start_keyboard
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     me = await context.bot.get_me()
-    play = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Play in a chat", switch_inline_query="CRANE")]
-    ])
-    await update.message.reply_text(texts.start_help(me.username), reply_markup=play)
+    await update.message.reply_text(
+        texts.start_help(me.username),
+        reply_markup=start_keyboard(),
+        parse_mode=PARSE_MODE,
+    )
 
 
 async def newduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -36,6 +38,7 @@ async def newduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sent = await update.message.reply_text(
         render_card(game),
         reply_markup=game_keyboard(game),
+        parse_mode=PARSE_MODE,
     )
     game["message_id"] = sent.message_id
     game["host_chat_id"] = chat_id

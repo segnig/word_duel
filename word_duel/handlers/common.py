@@ -39,6 +39,12 @@ async def reply_guess_result(message, result):
         return
 
     next_player = players[result.game["turn"]]
+    if result.kind == "reply":
+        await message.reply_text(
+            f"{result.board_text}\n\n"
+            f"Correct! {next_player['name']} gets an equal chance — type a word or /guess WORD."
+        )
+        return
     await message.reply_text(texts.next_turn(result.board_text, next_player["name"]))
 
 

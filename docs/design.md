@@ -44,14 +44,14 @@ head-to-head instead of against a fixed daily word.
    first, then yellows are assigned to remaining letter counts.
 
 4. **Winning**
-   - A player wins immediately when their guess exactly matches the opponent's
-     secret word (all green).
-   - If both players are still guessing after a configurable max number of
-     rounds (default: 10 guesses each) with no correct guess, the game ends
-     in a **draw**, and both secret words are revealed.
-   - If a player correctly guesses their opponent's word, the game ends
-     immediately — the opponent does **not** get a final guess (matches
-     strict alternating turn order; whoever guesses correctly first wins).
+   - Players always get the **same number of guesses**. If player A finds the
+     word first, player B still gets one more guess to match that count.
+   - If only one player has the word after equal guesses, that player wins.
+   - If both find the word in the same number of guesses, it is a **draw**.
+   - If both use all guesses (default 10 each) with no correct word, it is a
+     **draw**, and both secret words are revealed.
+   - Each player may ask for a **hint** at most **twice**. A hint privately
+     reveals one still-unknown letter of the opponent's word.
 
 ## 3. Game Flow (State Machine)
 

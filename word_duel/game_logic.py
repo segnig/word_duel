@@ -54,3 +54,22 @@ def render_feedback(guess, feedback):
 
 def is_win(feedback):
     return all(f == GREEN for f in feedback)
+
+
+def unknown_letter_positions(secret, history_for_player):
+    """Positions in `secret` this player has not yet scored as green."""
+    known = set()
+    for entry in history_for_player or []:
+        for i, color in enumerate(entry.get("feedback") or []):
+            if color == GREEN:
+                known.add(i)
+    return [i for i in range(len(secret)) if i not in known]
+
+
+def next_hint(secret, history_for_player):
+    """Reveal the first still-unknown letter (1-based position)."""
+    unknown = unknown_letter_positions(secret, history_for_player)
+    if not unknown:
+        return None
+    index = unknown[0]
+    return index + 1, secret[index]

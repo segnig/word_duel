@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from word_duel import db
 from word_duel.config import DEFAULT_MAX_ROUNDS, DEFAULT_WORD_LENGTH
 from word_duel.constants import (
+    MAX_HINTS,
     MAX_WORD_LENGTH,
     MIN_WORD_LENGTH,
     OTHER_ROLE,
@@ -22,6 +23,7 @@ from word_duel.game_logic import (
     evaluate_guess,
     is_valid_word,
     is_win,
+    next_hint,
     normalize_word,
     render_feedback,
 )
@@ -42,9 +44,17 @@ class SecretSubmitResult:
 
 @dataclass
 class GuessResult:
-    kind: str  # win | draw | next
+    kind: str  # win | draw | next | reply
     board_text: str
     game: dict
+
+
+@dataclass
+class HintResult:
+    position: int
+    letter: str
+    used: int
+    remaining: int
 
 
 def parse_word_length(args):
@@ -66,7 +76,20 @@ def _new_player(user):
         "name": user.first_name,
         "secret_word": None,
         "guesses_made": 0,
+        "solved": False,
+        "hints_used": 0,
     }
+
+
+def _player_history(game, role):
+    return [entry for entry in game.get("history", []) if entry["role"] == role]
+
+
+def _finish(game, winner, board_text, kind):
+    game["status"] = STATUS_FINISHED
+    game["winner"] = winner
+    db.save_game(game)
+    return GuessResult(kind=kind, board_text=board_text, game=game)
 
 
 def role_for_user(game, user_id):
@@ -164,27 +187,63 @@ def make_guess(game, user, raw_word):
         "feedback": feedback,
     })
     active_player["guesses_made"] += 1
+    if is_win(feedback):
+        active_player["solved"] = True
     board_text = render_feedback(guess_word, feedback)
 
-    if is_win(feedback):
-        game["status"] = STATUS_FINISHED
-        game["winner"] = turn
-        db.save_game(game)
-        return GuessResult(kind="win", board_text=board_text, game=game)
+    player_a = game["players"][ROLE_A]
+    player_b = game["players"][ROLE_B]
+    a_guesses = player_a["guesses_made"]
+    b_guesses = player_b["guesses_made"]
+    a_solved = player_a.get("solved", False)
+    b_solved = player_b.get("solved", False)
 
-    both_maxed = all(
-        player["guesses_made"] >= game["max_rounds"]
-        for player in game["players"].values()
-    )
+    # Equal chances: if someone solved and the other has fewer guesses, they reply.
+    if a_solved or b_solved:
+        if a_guesses != b_guesses:
+            trailing = ROLE_A if a_guesses < b_guesses else ROLE_B
+            game["turn"] = trailing
+            db.save_game(game)
+            return GuessResult(kind="reply", board_text=board_text, game=game)
+        if a_solved and b_solved:
+            return _finish(game, "draw", board_text, "draw")
+        winner = ROLE_A if a_solved else ROLE_B
+        return _finish(game, winner, board_text, "win")
+
+    both_maxed = a_guesses >= game["max_rounds"] and b_guesses >= game["max_rounds"]
     if both_maxed:
-        game["status"] = STATUS_FINISHED
-        game["winner"] = "draw"
-        db.save_game(game)
-        return GuessResult(kind="draw", board_text=board_text, game=game)
+        return _finish(game, "draw", board_text, "draw")
 
     game["turn"] = opponent_role
     db.save_game(game)
     return GuessResult(kind="next", board_text=board_text, game=game)
+
+
+def use_hint(game, user):
+    if not game or game["status"] != STATUS_IN_PROGRESS:
+        raise DuelError(texts.no_active_duel())
+    role = _require_player(game, user)
+    player = game["players"][role]
+    used = player.get("hints_used", 0)
+    if used >= MAX_HINTS:
+        raise DuelError(texts.no_hints_left())
+    if player.get("solved"):
+        raise DuelError("You already found the word.")
+
+    opponent = game["players"][OTHER_ROLE[role]]
+    hint = next_hint(opponent["secret_word"], _player_history(game, role))
+    if not hint:
+        raise DuelError("No hint left — you already know every letter.")
+
+    player["hints_used"] = used + 1
+    db.save_game(game)
+    position, letter = hint
+    return HintResult(
+        position=position,
+        letter=letter,
+        used=player["hints_used"],
+        remaining=MAX_HINTS - player["hints_used"],
+    )
 
 
 def cancel_game(game, user_id):
@@ -293,6 +352,8 @@ def rematch(game, user):
     for player in game["players"].values():
         player["secret_word"] = None
         player["guesses_made"] = 0
+        player["solved"] = False
+        player["hints_used"] = 0
     game["status"] = STATUS_SETUP
     game["turn"] = ROLE_A
     game["history"] = []

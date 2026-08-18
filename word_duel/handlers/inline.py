@@ -5,6 +5,7 @@ from word_duel import db, duel
 from word_duel.card import render_card
 from word_duel.constants import ROLE_A
 from word_duel.game_logic import normalize_word
+from word_duel.html import PARSE_MODE
 from word_duel.inline_query import parse_inline_query
 from word_duel.keyboards import game_keyboard
 
@@ -36,13 +37,19 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if host_word:
-        title = f"Word Duel · {host_word} ({length} letters)"
-        description = "Your word is set. Friend joins and tries to guess yours."
-        preview = f"🎮 Word Duel · {length} letters\n\nHost word is set. Tap Join to play."
+        title = f"Word Duel · {length} letters"
+        description = "Your secret word is set. Friend joins and guesses."
+        preview = (
+            f"⚔️ <b>Word Duel</b>  ·  {length} letters\n"
+            f"Secret is locked. Tap Join to play."
+        )
     else:
-        title = f"Word Duel ({length} letters)"
-        description = "Or type CRANE / 6 MONKEY to set your secret word now."
-        preview = f"🎮 Word Duel · {length} letters\n\nWaiting to start…"
+        title = f"Word Duel · {length} letters"
+        description = "Send a game — type a word like CRANE to lock it now."
+        preview = (
+            f"⚔️ <b>Word Duel</b>  ·  {length} letters\n"
+            f"Waiting to start…"
+        )
 
     await query.answer(
         [
@@ -50,10 +57,13 @@ async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 id=f"duel-{length}-{host_word or ''}",
                 title=title,
                 description=description,
-                input_message_content=InputTextMessageContent(preview),
+                input_message_content=InputTextMessageContent(
+                    preview,
+                    parse_mode=PARSE_MODE,
+                ),
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton(
-                        "Join game",
+                        "🙋  Join game",
                         callback_data=_join_callback(query.from_user.id, length, host_word),
                     )]
                 ]),
@@ -91,4 +101,5 @@ async def chosen_inline_result(update: Update, context: ContextTypes.DEFAULT_TYP
         text=render_card(game),
         inline_message_id=inline_id,
         reply_markup=game_keyboard(game),
+        parse_mode=PARSE_MODE,
     )

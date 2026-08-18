@@ -87,8 +87,10 @@ type guesses in the chat.
 2. Your friend taps **Join game** on that message.
 3. Friend sets their secret word on the letter buttons, then **✓**.
 4. Take turns tapping a guess + **✓**. The same message updates with
-   Wordle-style colors.
-5. First exact match wins. **Play again** starts a rematch with the same two players.
+   Wordle-style colors. If you find the word first, your opponent still gets
+   the same number of guesses. Tap **Hint** up to twice (private popup).
+5. After equal guesses, the player who found the word wins — or it's a draw
+   if both found it. **Play again** starts a rematch with the same two players.
 
 You can also add the bot to a group and send `/newduel` (or `/newduel 6`).
 `/cancel` or the Cancel button abandons a game.

@@ -3,14 +3,30 @@
 
 def start_help(bot_username="wordduelbot"):
     return (
-        "👋 Word Duel works like @xoBot: one message, tap buttons.\n\n"
-        f"In any chat, type @{bot_username} and:\n"
-        "• `CRANE` — 5-letter game, your word is CRANE\n"
-        "• `6 MONKEY` — 6-letter game, your word is MONKEY\n"
-        "• `6` — 6-letter game, pick word on buttons\n\n"
-        "Your friend taps Join, sets their word, then you take turns guessing.\n"
-        "Secret words stay hidden — only you see yours in a popup.\n\n"
-        "Or add me to a group and send /newduel."
+        f"⚔️ <b>Word Duel</b>\n"
+        f"Guess each other’s secret word — one message, tap buttons.\n\n"
+        f"<b>Start a game</b> in any chat:\n"
+        f"• <code>@{bot_username} CRANE</code> — your word is CRANE\n"
+        f"• <code>@{bot_username} 6 MONKEY</code> — 6 letters\n"
+        f"• <code>@{bot_username}</code> — pick length &amp; word on buttons\n\n"
+        f"<b>Rules</b>\n"
+        f"Both players get the same number of guesses.\n"
+        f"Each player has 2 private hints.\n"
+        f"Your secret stays in a popup — the chat never sees it.\n\n"
+        f"Or add me to a group and send /newduel"
+    )
+
+
+def how_to_play():
+    return (
+        "<b>How to play</b>\n\n"
+        "1. Send a game to a chat\n"
+        "2. Friend taps <b>Join</b>\n"
+        "3. Each locks a secret word (popup only)\n"
+        "4. Tap letters → <b>Enter</b> to guess\n"
+        "5. 🟩 right spot · 🟨 in the word · ⬜ no\n\n"
+        "If you find it first, they still get an equal guess.\n"
+        "<b>💡 Hint</b> — 2 times, only you see it."
     )
 
 
@@ -144,3 +160,12 @@ def only_players_can_cancel():
 
 def game_cancelled():
     return "Game cancelled."
+
+
+def no_hints_left():
+    return "You already used both hints (2 max)."
+
+
+def hint_popup(position, letter, used, remaining):
+    extra = "last hint" if remaining == 0 else f"{remaining} left"
+    return f"💡 {letter}  is letter  {position}\nHint {used}/2  ·  {extra}"
