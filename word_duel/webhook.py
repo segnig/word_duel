@@ -27,6 +27,16 @@ def build_webhook_app(application: Application) -> Starlette:
     health_path = HEALTH_PATH if HEALTH_PATH.startswith("/") else f"/{HEALTH_PATH}"
 
     async def telegram(request: Request) -> Response:
+        if request.method == "GET":
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "service": "word-duel",
+                    "path": path,
+                    "detail": "Telegram webhook. Telegram sends POST here; GET is only a check.",
+                    "health": "/health",
+                }
+            )
         if WEBHOOK_SECRET:
             token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
             if token != WEBHOOK_SECRET:
@@ -68,7 +78,7 @@ def build_webhook_app(application: Application) -> Starlette:
 
     return Starlette(
         routes=[
-            Route(path, telegram, methods=["POST"]),
+            Route(path, telegram, methods=["GET", "POST"]),
             Route(health_path, health, methods=["GET"]),
             Route("/healthz", health, methods=["GET"]),
             Route("/", root, methods=["GET"]),
