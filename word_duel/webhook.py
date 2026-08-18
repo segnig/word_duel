@@ -1,5 +1,6 @@
 """Starlette app: Telegram webhook + /health for Render."""
 
+import logging
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 
@@ -12,6 +13,8 @@ from telegram.ext import Application
 
 from word_duel.config import HEALTH_PATH, WEBHOOK_PATH, WEBHOOK_SECRET, WEBHOOK_URL
 from word_duel.health import health_payload
+
+log = logging.getLogger(__name__)
 
 
 def webhook_url():
@@ -30,11 +33,11 @@ def build_webhook_app(application: Application) -> Starlette:
                 return Response(status_code=HTTPStatus.FORBIDDEN)
         try:
             data = await request.json()
+            update = Update.de_json(data=data, bot=application.bot)
+            if update:
+                await application.update_queue.put(update)
         except Exception:
-            return Response(status_code=HTTPStatus.BAD_REQUEST)
-        update = Update.de_json(data=data, bot=application.bot)
-        if update:
-            await application.update_queue.put(update)
+            log.exception("Failed to handle Telegram webhook update")
         return Response(status_code=HTTPStatus.OK)
 
     async def health(_: Request) -> JSONResponse:
@@ -48,16 +51,20 @@ def build_webhook_app(application: Application) -> Starlette:
     @asynccontextmanager
     async def lifespan(_app: Starlette):
         async with application:
+            url = webhook_url()
             await application.bot.set_webhook(
-                url=webhook_url(),
+                url=url,
                 secret_token=WEBHOOK_SECRET or None,
-                drop_pending_updates=True,
+                drop_pending_updates=False,
                 allowed_updates=Update.ALL_TYPES,
             )
+            info = await application.bot.get_webhook_info()
+            log.info("Telegram webhook set to %s (pending=%s)", info.url, info.pending_update_count)
             await application.start()
             yield
             await application.stop()
-            await application.bot.delete_webhook()
+            # Keep the webhook registered. Deleting it on Render sleep/restart
+            # makes Telegram drop updates and the bot goes silent.
 
     return Starlette(
         routes=[
