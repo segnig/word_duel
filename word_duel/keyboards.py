@@ -1,6 +1,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from word_duel.constants import ROLE_B, STATUS_FINISHED, STATUS_IN_PROGRESS, STATUS_SETUP
+from word_duel.constants import MODE_SOLO, ROLE_B, STATUS_FINISHED, STATUS_IN_PROGRESS, STATUS_SETUP
 
 LETTER_ROWS = [
     list("QWERTYUIOP"),
@@ -15,6 +15,7 @@ def join_keyboard():
 
 def start_keyboard():
     return InlineKeyboardMarkup([
+        [InlineKeyboardButton("▶  Play solo", callback_data="solo")],
         [InlineKeyboardButton("▶  Play with a friend", switch_inline_query="")],
         [InlineKeyboardButton("How to play", callback_data="help")],
     ])
@@ -38,12 +39,16 @@ def _letter_rows(include_hint=False):
 def game_keyboard(game):
     rows = []
     status = game["status"]
-    waiting = status == STATUS_SETUP and ROLE_B not in game["players"]
+    waiting = (
+        status == STATUS_SETUP
+        and ROLE_B not in game["players"]
+        and game.get("mode") != MODE_SOLO
+    )
     if waiting:
         rows.append([InlineKeyboardButton("🙋  Join game", callback_data="join")])
     if status in (STATUS_SETUP, STATUS_IN_PROGRESS):
         rows.extend(_letter_rows(include_hint=(status == STATUS_IN_PROGRESS)))
         rows.append([InlineKeyboardButton("✕  End game", callback_data="x")])
     if status == STATUS_FINISHED:
-        rows.append([InlineKeyboardButton("🔄  Rematch", callback_data="again")])
+        rows.append([InlineKeyboardButton("🎉  Play again", callback_data="again")])
     return InlineKeyboardMarkup(rows)

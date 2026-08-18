@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from word_duel import db
 from word_duel.config import DEFAULT_MAX_ROUNDS, DEFAULT_WORD_LENGTH
 from word_duel.constants import (
+    BOT_USER_ID,
     MAX_HINTS,
     MAX_WORD_LENGTH,
     MIN_WORD_LENGTH,
+    MODE_SOLO,
     OTHER_ROLE,
     ROLE_A,
     ROLE_B,
@@ -27,6 +29,7 @@ from word_duel.game_logic import (
     normalize_word,
     render_feedback,
 )
+from word_duel.words import pick_secret
 from word_duel import texts
 
 
@@ -44,7 +47,7 @@ class SecretSubmitResult:
 
 @dataclass
 class GuessResult:
-    kind: str  # win | draw | next | reply
+    kind: str  # win | draw | next | reply | loss
     board_text: str
     game: dict
 
@@ -92,6 +95,10 @@ def _finish(game, winner, board_text, kind):
     return GuessResult(kind=kind, board_text=board_text, game=game)
 
 
+def is_solo(game):
+    return bool(game) and game.get("mode") == MODE_SOLO
+
+
 def role_for_user(game, user_id):
     if not game:
         return None
@@ -122,7 +129,40 @@ def start_game(chat_id, user, word_length=None, host_word=None):
     return game
 
 
+def start_solo_game(chat_id, user, word_length=None, bot_name="Bot"):
+    existing = db.get_game(chat_id)
+    if existing and existing["status"] != STATUS_FINISHED:
+        raise DuelError(texts.game_already_active())
+
+    if word_length is None:
+        word_length = DEFAULT_WORD_LENGTH
+
+    try:
+        secret = pick_secret(word_length)
+    except ValueError as exc:
+        raise DuelError(str(exc)) from exc
+
+    game = db.create_game(chat_id, word_length, DEFAULT_MAX_ROUNDS)
+    game["mode"] = MODE_SOLO
+    game["status"] = STATUS_IN_PROGRESS
+    game["turn"] = ROLE_A
+    game["players"][ROLE_A] = _new_player(user)
+    game["players"][ROLE_B] = {
+        "user_id": BOT_USER_ID,
+        "name": bot_name or "Bot",
+        "secret_word": secret,
+        "guesses_made": 0,
+        "solved": False,
+        "hints_used": 0,
+        "is_bot": True,
+    }
+    db.save_game(game)
+    return game
+
+
 def join_game(game, user):
+    if is_solo(game):
+        raise DuelError("This is a solo game — no opponent to join.")
     if game["status"] != STATUS_SETUP or ROLE_B in game["players"]:
         raise DuelError("Game is already full or in progress.")
     if user.id == game["players"][ROLE_A]["user_id"]:
@@ -197,6 +237,14 @@ def make_guess(game, user, raw_word):
     b_guesses = player_b["guesses_made"]
     a_solved = player_a.get("solved", False)
     b_solved = player_b.get("solved", False)
+
+    if is_solo(game):
+        if a_solved:
+            return _finish(game, ROLE_A, board_text, "win")
+        if a_guesses >= game["max_rounds"]:
+            return _finish(game, ROLE_B, board_text, "loss")
+        db.save_game(game)
+        return GuessResult(kind="next", board_text=board_text, game=game)
 
     # Equal chances: if someone solved and the other has fewer guesses, they reply.
     if a_solved or b_solved:
@@ -349,6 +397,30 @@ def rematch(game, user):
     if not game or game["status"] != STATUS_FINISHED:
         raise DuelError("No finished game to rematch.")
     _require_player(game, user)
+
+    if is_solo(game):
+        try:
+            secret = pick_secret(game["word_length"])
+        except ValueError as exc:
+            raise DuelError(str(exc)) from exc
+        player = game["players"][ROLE_A]
+        bot = game["players"][ROLE_B]
+        player["secret_word"] = None
+        player["guesses_made"] = 0
+        player["solved"] = False
+        player["hints_used"] = 0
+        bot["secret_word"] = secret
+        bot["guesses_made"] = 0
+        bot["solved"] = False
+        bot["hints_used"] = 0
+        game["status"] = STATUS_IN_PROGRESS
+        game["turn"] = ROLE_A
+        game["history"] = []
+        game["winner"] = None
+        game["drafts"] = {"A": "", "B": ""}
+        db.save_game(game)
+        return game
+
     for player in game["players"].values():
         player["secret_word"] = None
         player["guesses_made"] = 0

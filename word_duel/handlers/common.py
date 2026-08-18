@@ -32,6 +32,13 @@ async def reply_guess_result(message, result):
         )
         return
 
+    if result.kind == "loss":
+        secret = players["B"].get("secret_word")
+        guesses = players["A"].get("guesses_made", 0)
+        cap = result.game.get("max_rounds", 10)
+        await message.reply_text(texts.loss_message(result.board_text, secret, guesses, cap))
+        return
+
     if result.kind == "draw":
         await message.reply_text(
             texts.draw_message(result.board_text, players["A"], players["B"])

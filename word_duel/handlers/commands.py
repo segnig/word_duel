@@ -25,12 +25,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def newduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+    chat = update.effective_chat
     user = update.effective_user
     word_length = duel.parse_word_length(context.args)
+    bot_name = (context.bot.first_name or "Bot").strip()
 
     try:
-        game = duel.start_game(chat_id, user, word_length)
+        if chat.type == "private":
+            game = duel.start_solo_game(chat.id, user, word_length, bot_name)
+        else:
+            game = duel.start_game(chat.id, user, word_length)
     except duel.DuelError as exc:
         await update.message.reply_text(exc.message)
         return
@@ -41,7 +45,7 @@ async def newduel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=PARSE_MODE,
     )
     game["message_id"] = sent.message_id
-    game["host_chat_id"] = chat_id
+    game["host_chat_id"] = chat.id
     db.save_game(game)
 
 

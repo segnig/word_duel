@@ -4,11 +4,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from word_duel import db, duel, texts
-from word_duel.card import format_draft
+from word_duel.card import format_draft, render_card
 from word_duel.config import DEFAULT_WORD_LENGTH
 from word_duel.constants import ROLE_A, ROLE_B
 from word_duel.html import PARSE_MODE
 from word_duel.handlers.card import game_id_from_query, refresh_card
+from word_duel.keyboards import game_keyboard
 
 
 async def _load_game(query):
@@ -47,6 +48,33 @@ async def _ensure_inline_game(query, data):
     game["inline_message_id"] = query.inline_message_id
     db.save_game(game)
     return game
+
+
+async def handle_solo(query, context):
+    message = query.message
+    if not message or message.chat.type != "private":
+        await query.answer("Open a private chat with me and send /newduel.", show_alert=True)
+        return
+    bot_name = (context.bot.first_name or "Bot").strip()
+    try:
+        game = duel.start_solo_game(
+            message.chat.id,
+            query.from_user,
+            DEFAULT_WORD_LENGTH,
+            bot_name,
+        )
+    except duel.DuelError as exc:
+        await query.answer(exc.message, show_alert=True)
+        return
+    await query.answer("Solo game started — guess the word.")
+    sent = await message.reply_text(
+        render_card(game),
+        reply_markup=game_keyboard(game),
+        parse_mode=PARSE_MODE,
+    )
+    game["message_id"] = sent.message_id
+    game["host_chat_id"] = message.chat.id
+    db.save_game(game)
 
 
 async def handle_join(query, game):
@@ -92,16 +120,13 @@ async def handle_confirm(query, game):
         await refresh_card(result.game, query=query)
         return
 
-    if result.kind == "reply":
+    if result.kind in ("win", "loss", "draw"):
+        await query.answer(
+            texts.finish_alert(result.kind, result.game, query.from_user.id),
+            show_alert=True,
+        )
+    elif result.kind == "reply":
         await query.answer("Correct! Opponent gets an equal chance.")
-    elif result.kind == "win":
-        winner = result.game["players"][result.game["winner"]]
-        if winner["user_id"] == query.from_user.id:
-            await query.answer("That's the word — you win!")
-        else:
-            await query.answer(f"{winner['name']} wins — they found the word.")
-    elif result.kind == "draw":
-        await query.answer("It's a draw!")
     else:
         await query.answer("Guess posted.")
     await refresh_card(result.game, query=query)
@@ -143,7 +168,10 @@ async def handle_rematch(query, game):
     except duel.DuelError as exc:
         await query.answer(exc.message, show_alert=True)
         return
-    await query.answer("Rematch — lock your secret words.")
+    if duel.is_solo(game):
+        await query.answer("🎉 New word. Good luck!")
+    else:
+        await query.answer("Play again — lock your secret words.")
     await refresh_card(game, query=query)
 
 
@@ -152,6 +180,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data or ""
     if data == "help":
         await handle_help(query)
+        return
+    if data == "solo":
+        await handle_solo(query, context)
         return
     game = await _load_game(query)
     if not game and (data == "join" or data.startswith("join:")):

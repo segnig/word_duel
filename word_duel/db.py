@@ -48,6 +48,7 @@ def create_game(chat_id, word_length, max_rounds):
     game = {
         "_id": chat_id,
         "status": "SETUP",
+        "mode": "duel",
         "word_length": word_length,
         "max_rounds": max_rounds,
         "players": {},
