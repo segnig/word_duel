@@ -1,7 +1,6 @@
 import logging
 
 import httpx
-import uvicorn
 from telegram.error import NetworkError, TimedOut
 from telegram.ext import ApplicationBuilder
 from telegram.request import HTTPXRequest
@@ -16,7 +15,6 @@ from word_duel.config import (
 )
 from word_duel.db import check_connection
 from word_duel.handlers import register_handlers
-from word_duel.webhook import build_webhook_app, webhook_url
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -81,6 +79,13 @@ def _ensure_ready():
 
 
 def run_webhook():
+    try:
+        import uvicorn
+        from word_duel.webhook import build_webhook_app, webhook_url
+    except ImportError as exc:
+        raise RuntimeError(
+            "Webhook extras missing. Run: pip install -r requirements.txt"
+        ) from exc
     application = build_app(webhook=True)
     starlette_app = build_webhook_app(application)
     log.info("Webhook mode on port %s → %s", PORT, webhook_url())
