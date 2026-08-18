@@ -1,54 +1,63 @@
-# Deploy Word Duel (when Telegram is blocked locally)
+# Deploy Word Duel on Render (webhooks)
 
-If `python bot.py` shows **MongoDB connected** but **Telegram timed out**,
-your PC cannot reach `api.telegram.org`. Deploy the bot to the cloud instead.
-You still use the bot normally in Telegram on your phone.
+The bot uses **webhooks** in production (Telegram POSTs to `/telegram`) and
+**polling** locally if `WEBHOOK_URL` / `RENDER_EXTERNAL_URL` is not set.
 
-## Option A — Render (free, recommended)
+## 1. Atlas
 
-1. Push this project to **GitHub** (do not commit `.env`).
-2. Go to [render.com](https://render.com) → sign up → **New** → **Blueprint**.
-3. Connect your GitHub repo. Render reads `render.yaml`.
-4. Add **Environment Variables** in the Render dashboard:
-   - `BOT_TOKEN` — from BotFather
-   - `MONGO_URI` or `MONGODB_URI` — your Atlas connection string
-   - `MONGO_DB_NAME` — `word_duel`
-5. Click **Deploy**. The **Worker** service runs `python bot.py` 24/7.
-6. Open your bot in Telegram and test `/start`.
+**Network Access** → Allow `0.0.0.0/0` (or Render outbound IPs).
 
-Atlas **Network Access** must allow Render’s IPs, or use `0.0.0.0/0` (allow all).
+## 2. Push to GitHub
 
-## Option B — VPN on your PC
-
-1. Connect a VPN that allows Telegram.
-2. Run:
-   ```bash
-   python scripts/check_network.py
-   python bot.py
-   ```
-
-## Option C — Local SOCKS proxy
-
-If your VPN app exposes SOCKS5 on localhost:
-
-```env
-TELEGRAM_PROXY=socks5://127.0.0.1:1080
-```
-
-Install SOCKS support:
-```bash
-pip install "python-telegram-bot[socks]"
-```
-
-Then run `python bot.py`.
-
-## Option D — Docker (any VPS)
-
-On a server where Telegram works (DigitalOcean, AWS, etc.):
+Do **not** commit `.env`.
 
 ```bash
-docker build -t word-duel .
-docker run -d --env-file .env --name word-duel word-duel
+git add .
+git commit -m "Webhook deploy for Render"
+git push origin master
 ```
 
-Use the same `.env` variables as locally (never commit `.env`).
+## 3. Render web service
+
+1. [render.com](https://render.com) → **New** → **Blueprint** → this repo.
+2. `render.yaml` creates a **web** service (not a worker) so it has a public URL.
+3. Fill env vars:
+   - `BOT_TOKEN`
+   - `MONGO_URI` (Atlas connection string)
+4. `RENDER_EXTERNAL_URL` is set by Render. The bot registers
+   `https://YOUR-APP.onrender.com/telegram` as the Telegram webhook.
+5. Wait for deploy. Open `https://YOUR-APP.onrender.com/health` — expect JSON `"status":"ok"`.
+
+## 4. GitHub Action (every 5 minutes)
+
+Keeps the free Render service awake and alerts if `/health` fails.
+
+1. GitHub repo → **Settings** → **Secrets and variables** → **Actions**
+2. New secret **`HEALTH_URL`** =
+   `https://YOUR-APP.onrender.com/health`
+3. **Actions** → **Health check** → **Run workflow** once to test.
+
+The workflow file is `.github/workflows/health.yml` (`cron: "*/5 * * * *"`).
+
+## 5. Test the bot
+
+Open your bot in Telegram → `/start`.
+
+## Local run (polling)
+
+```bash
+python bot.py
+```
+
+No `WEBHOOK_URL` → polling. Telegram must be reachable from your PC.
+
+## Endpoints
+
+| Path | Method | Purpose |
+|---|---|---|
+| `/health` | GET | Liveness + MongoDB ping |
+| `/healthz` | GET | Same as `/health` |
+| `/telegram` | POST | Telegram webhook |
+| `/` | GET | Simple up check |
+
+Do **not** set `TELEGRAM_PROXY` on Render.

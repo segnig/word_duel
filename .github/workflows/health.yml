@@ -1,0 +1,25 @@
+name: Health check
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping /health every 5 minutes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check server health
+        env:
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "Set repository secret HEALTH_URL to https://YOUR-SERVICE.onrender.com/health"
+            exit 1
+          fi
+          echo "GET $HEALTH_URL"
+          curl -fsS --retry 3 --retry-delay 5 --max-time 45 "$HEALTH_URL"
+          echo
+          echo "Health check passed"

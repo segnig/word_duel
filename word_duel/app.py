@@ -1,13 +1,22 @@
 import logging
 
 import httpx
+import uvicorn
 from telegram.error import NetworkError, TimedOut
 from telegram.ext import ApplicationBuilder
 from telegram.request import HTTPXRequest
 
-from word_duel.config import BOT_TOKEN, MONGO_URI, TELEGRAM_PROXY, TELEGRAM_TIMEOUT
+from word_duel.config import (
+    BOT_TOKEN,
+    MONGO_URI,
+    PORT,
+    TELEGRAM_PROXY,
+    TELEGRAM_TIMEOUT,
+    WEBHOOK_URL,
+)
 from word_duel.db import check_connection
 from word_duel.handlers import register_handlers
+from word_duel.webhook import build_webhook_app, webhook_url
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -37,44 +46,60 @@ def verify_telegram():
     log.info("Telegram OK (@%s)", username)
 
 
-def build_app():
+def build_app(*, webhook: bool = False):
     request = _telegram_request()
-    builder = ApplicationBuilder().token(BOT_TOKEN).request(request).get_updates_request(request)
+    builder = ApplicationBuilder().token(BOT_TOKEN).request(request)
+    if webhook:
+        builder = builder.updater(None)
+    else:
+        builder = builder.get_updates_request(request)
     app = builder.build()
     register_handlers(app)
     return app
 
 
-def main():
+def _ensure_ready():
     log.info("Word Duel bot starting...")
     if "YOUR_BOT_TOKEN" in BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        raise RuntimeError("Set BOT_TOKEN in .env before running.")
+        raise RuntimeError("Set BOT_TOKEN in .env (or Render env) before running.")
     check_connection()
     log.info("MongoDB connected (%s)", "Atlas" if MONGO_URI.startswith("mongodb+srv") else "local")
     if TELEGRAM_PROXY:
-        log.info("Using proxy for Telegram: %s", TELEGRAM_PROXY.split("@")[-1])
+        log.info("Using Telegram proxy: %s", TELEGRAM_PROXY.split("@")[-1])
     try:
         verify_telegram()
     except httpx.ConnectError as exc:
         if TELEGRAM_PROXY and "127.0.0.1" in TELEGRAM_PROXY:
             raise RuntimeError(
                 f"Proxy is set ({TELEGRAM_PROXY}) but nothing is listening.\n"
-                "Start Clash/V2Ray first, or fix the port in .env, or remove TELEGRAM_PROXY.\n"
-                "Easiest fix: deploy to Render — docs/DEPLOY.md"
+                "Start Clash/V2Ray, or remove TELEGRAM_PROXY for Render."
             ) from exc
         raise RuntimeError(
-            "Cannot reach Telegram. MongoDB is OK.\n"
-            "Deploy to Render (docs/DEPLOY.md) or start a VPN/proxy."
+            "Cannot reach Telegram. On Render this should work; locally use a VPN/proxy "
+            "or deploy (docs/DEPLOY.md)."
         ) from exc
-    except Exception as exc:
-        raise RuntimeError(
-            "Cannot reach Telegram (api.telegram.org). MongoDB is OK.\n"
-            "Deploy to Render (docs/DEPLOY.md), or start Clash/V2Ray on the port in TELEGRAM_PROXY."
-        ) from exc
+
+
+def run_webhook():
+    application = build_app(webhook=True)
+    starlette_app = build_webhook_app(application)
+    log.info("Webhook mode on port %s → %s", PORT, webhook_url())
+    uvicorn.run(starlette_app, host="0.0.0.0", port=PORT, log_level="info")
+
+
+def run_polling():
+    log.info("Polling mode (no WEBHOOK_URL / RENDER_EXTERNAL_URL)")
     try:
-        build_app().run_polling(drop_pending_updates=True, bootstrap_retries=5)
+        build_app(webhook=False).run_polling(drop_pending_updates=True, bootstrap_retries=5)
     except (TimedOut, NetworkError) as exc:
         raise RuntimeError(
-            "Lost connection to Telegram while running.\n"
-            "Deploy to Render (docs/DEPLOY.md) so the bot stays online 24/7."
+            "Lost connection to Telegram while polling. Deploy to Render with webhooks."
         ) from exc
+
+
+def main():
+    _ensure_ready()
+    if WEBHOOK_URL:
+        run_webhook()
+    else:
+        run_polling()

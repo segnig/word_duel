@@ -25,22 +25,14 @@ MONGO_DB_NAME = os.environ.get("MONGO_DB_NAME", "word_duel")
 DEFAULT_WORD_LENGTH = int(os.environ.get("WORD_LENGTH", 5))
 DEFAULT_MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", 10))
 
-
-def _proxy_from_env():
-    for key in (
-        "TELEGRAM_PROXY",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "HTTP_PROXY",
-        "http_proxy",
-        "ALL_PROXY",
-        "all_proxy",
-    ):
-        value = os.environ.get(key)
-        if value:
-            return value.strip()
-    return None
-
-
-TELEGRAM_PROXY = _proxy_from_env()
+# Local proxy only — do not inherit HTTPS_PROXY (hosts like Render inject that).
+TELEGRAM_PROXY = (os.environ.get("TELEGRAM_PROXY") or "").strip() or None
 TELEGRAM_TIMEOUT = float(os.environ.get("TELEGRAM_TIMEOUT", 30))
+
+PORT = int(os.environ.get("PORT", 8080))
+WEBHOOK_URL = (
+    os.environ.get("WEBHOOK_URL") or os.environ.get("RENDER_EXTERNAL_URL") or ""
+).rstrip("/")
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/telegram")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET") or ""
+HEALTH_PATH = os.environ.get("HEALTH_PATH", "/health")

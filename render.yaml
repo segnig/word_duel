@@ -1,11 +1,13 @@
-# Deploy: Render → New → Blueprint → connect github.com/segnig/word_duel
+# Deploy: Render → New → Blueprint → connect this repo
+# Web service (webhooks) — not a worker. Telegram POSTs updates to /telegram.
 services:
-  - type: worker
+  - type: web
     name: word-duel-bot
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.0"
@@ -15,9 +17,15 @@ services:
         sync: false
       - key: MONGODB_URI
         sync: false
+      - key: WEBHOOK_SECRET
+        generateValue: true
       - key: MONGO_DB_NAME
         value: word_duel
       - key: WORD_LENGTH
         value: "5"
       - key: MAX_ROUNDS
         value: "10"
+      - key: WEBHOOK_PATH
+        value: /telegram
+      - key: HEALTH_PATH
+        value: /health

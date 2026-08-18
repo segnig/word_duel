@@ -8,7 +8,9 @@ See `docs/design.md` for the full game design.
 ```
 bot.py                     # entry point — python bot.py
 word_duel/
-  app.py                   # Telegram application + polling
+  app.py                   # polling (local) or webhook (Render)
+  webhook.py               # /telegram + /health HTTP app
+  health.py                # health JSON payload
   config.py                # env-based settings
   constants.py             # statuses, roles, word-length bounds
   duel.py                  # game flow (start, join, guess, cancel)
@@ -67,7 +69,9 @@ MONGO_DB_NAME=word_duel
 python bot.py
 ```
 
-You should see `MongoDB connected (Atlas)` then the bot starts polling.
+You should see `MongoDB connected (Atlas)` then polling (local) or webhook (Render).
+
+**Deploy:** see [docs/DEPLOY.md](docs/DEPLOY.md) — Render web service + GitHub Action pinging `/health` every 5 minutes.
 
 **Local MongoDB instead?** Use `MONGO_URI=mongodb://localhost:27017` or Docker:
 ```bash
