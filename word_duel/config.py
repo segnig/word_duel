@@ -24,7 +24,7 @@ MONGO_DB_NAME = os.environ.get("MONGO_DB_NAME", "word_duel")
 
 DEFAULT_WORD_LENGTH = int(os.environ.get("WORD_LENGTH", 5))
 DEFAULT_MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", 10))
-GAME_TIMEOUT_MINUTES = int(os.environ.get("GAME_TIMEOUT_MINUTES", 10))
+GAME_TIMEOUT_MINUTES = int(os.environ.get("GAME_TIMEOUT_MINUTES", 20))
 
 # Local proxy only — do not inherit HTTPS_PROXY (hosts like Render inject that).
 TELEGRAM_PROXY = (os.environ.get("TELEGRAM_PROXY") or "").strip() or None
