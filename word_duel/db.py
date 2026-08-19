@@ -7,12 +7,13 @@ Collections:
                        chat_id and role ("A"/"B") they're submitting a secret
                        word for.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 
-from word_duel.config import MONGO_DB_NAME, MONGO_URI
+from word_duel.config import GAME_TIMEOUT_MINUTES, MONGO_DB_NAME, MONGO_URI
+from word_duel.constants import STATUS_FINISHED, STATUS_IN_PROGRESS, STATUS_SETUP
 
 _client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=15000)
 _db = _client[MONGO_DB_NAME]
@@ -45,9 +46,10 @@ def now():
 
 
 def create_game(chat_id, word_length, max_rounds):
+    created = now()
     game = {
         "_id": chat_id,
-        "status": "SETUP",
+        "status": STATUS_SETUP,
         "mode": "duel",
         "word_length": word_length,
         "max_rounds": max_rounds,
@@ -59,8 +61,9 @@ def create_game(chat_id, word_length, max_rounds):
         "host_chat_id": chat_id if isinstance(chat_id, int) else None,
         "message_id": None,
         "inline_message_id": None,
-        "created_at": now(),
-        "updated_at": now(),
+        "created_at": created,
+        "updated_at": created,
+        "expires_at": created + timedelta(minutes=GAME_TIMEOUT_MINUTES),
     }
     games_col.replace_one({"_id": chat_id}, game, upsert=True)
     return game
@@ -93,3 +96,9 @@ def get_pending(user_id):
 
 def clear_pending(user_id):
     pending_col.delete_one({"_id": user_id})
+
+
+def list_active_games():
+    return list(
+        games_col.find({"status": {"$in": [STATUS_SETUP, STATUS_IN_PROGRESS]}})
+    )

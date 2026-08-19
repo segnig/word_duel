@@ -1,7 +1,8 @@
 """Starlette app: Telegram webhook + /health for Render."""
 
+import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from http import HTTPStatus
 
 from starlette.applications import Starlette
@@ -13,6 +14,7 @@ from telegram.ext import Application
 
 from word_duel.config import HEALTH_PATH, WEBHOOK_PATH, WEBHOOK_SECRET, WEBHOOK_URL
 from word_duel.health import health_payload
+from word_duel.timer import run_timer_loop
 
 log = logging.getLogger(__name__)
 
@@ -71,8 +73,14 @@ def build_webhook_app(application: Application) -> Starlette:
             info = await application.bot.get_webhook_info()
             log.info("Telegram webhook set to %s (pending=%s)", info.url, info.pending_update_count)
             await application.start()
-            yield
-            await application.stop()
+            timer_task = asyncio.create_task(run_timer_loop(application))
+            try:
+                yield
+            finally:
+                timer_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await timer_task
+                await application.stop()
             # Keep the webhook registered. Deleting it on Render sleep/restart
             # makes Telegram drop updates and the bot goes silent.
 

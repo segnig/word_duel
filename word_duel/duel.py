@@ -30,6 +30,7 @@ from word_duel.game_logic import (
     render_feedback,
 )
 from word_duel.words import pick_secret
+from word_duel.timer import apply_timeout_if_needed, ensure_timer, reset_timer
 from word_duel import texts
 
 
@@ -91,8 +92,20 @@ def _player_history(game, role):
 def _finish(game, winner, board_text, kind):
     game["status"] = STATUS_FINISHED
     game["winner"] = winner
+    game.pop("end_reason", None)
     db.save_game(game)
     return GuessResult(kind=kind, board_text=board_text, game=game)
+
+
+def touch_game(game):
+    """Expire if needed. Returns False when the game is over."""
+    if not game:
+        return False
+    apply_timeout_if_needed(game)
+    if game.get("status") == STATUS_FINISHED:
+        return False
+    ensure_timer(game)
+    return True
 
 
 def is_solo(game):
@@ -161,6 +174,8 @@ def start_solo_game(chat_id, user, word_length=None, bot_name="Bot"):
 
 
 def join_game(game, user):
+    if not touch_game(game):
+        raise DuelError(texts.game_timed_out())
     if is_solo(game):
         raise DuelError("This is a solo game — no opponent to join.")
     if game["status"] != STATUS_SETUP or ROLE_B in game["players"]:
@@ -181,6 +196,9 @@ def submit_secret_word(user_id, raw_word):
 
     game = db.get_game(pending["chat_id"])
     if not game or game["status"] != STATUS_SETUP:
+        db.clear_pending(user_id)
+        return None
+    if not touch_game(game):
         db.clear_pending(user_id)
         return None
 
@@ -204,7 +222,9 @@ def submit_secret_word(user_id, raw_word):
 
 
 def make_guess(game, user, raw_word):
-    if not game or game["status"] != STATUS_IN_PROGRESS:
+    if not touch_game(game):
+        raise DuelError(texts.game_timed_out())
+    if game["status"] != STATUS_IN_PROGRESS:
         raise DuelError(texts.no_active_duel())
 
     turn = game["turn"]
@@ -268,7 +288,9 @@ def make_guess(game, user, raw_word):
 
 
 def use_hint(game, user):
-    if not game or game["status"] != STATUS_IN_PROGRESS:
+    if not touch_game(game):
+        raise DuelError(texts.game_timed_out())
+    if game["status"] != STATUS_IN_PROGRESS:
         raise DuelError(texts.no_active_duel())
     role = _require_player(game, user)
     player = game["players"][role]
@@ -315,6 +337,8 @@ def _drafts(game):
 def _require_player(game, user):
     if not game:
         raise DuelError(texts.no_active_duel())
+    if not touch_game(game):
+        raise DuelError(texts.game_timed_out())
     role = role_for_user(game, user.id)
     if not role:
         raise DuelError("You're not in this game.")
@@ -418,6 +442,8 @@ def rematch(game, user):
         game["history"] = []
         game["winner"] = None
         game["drafts"] = {"A": "", "B": ""}
+        game.pop("end_reason", None)
+        reset_timer(game)
         db.save_game(game)
         return game
 
@@ -431,6 +457,8 @@ def rematch(game, user):
     game["history"] = []
     game["winner"] = None
     game["drafts"] = {"A": "", "B": ""}
+    game.pop("end_reason", None)
+    reset_timer(game)
     db.save_game(game)
     for role, player in game["players"].items():
         db.set_pending(player["user_id"], game["_id"], role)

@@ -51,6 +51,14 @@ def build_app(*, webhook: bool = False):
         builder = builder.updater(None)
     else:
         builder = builder.get_updates_request(request)
+
+        async def _start_timer(application):
+            import asyncio
+            from word_duel.timer import run_timer_loop
+
+            asyncio.create_task(run_timer_loop(application))
+
+        builder = builder.post_init(_start_timer)
     app = builder.build()
     register_handlers(app)
     return app

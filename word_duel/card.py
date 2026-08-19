@@ -1,6 +1,8 @@
 """Single in-chat game card — two-line guesses, clear turn / waiting."""
 
+from word_duel.config import GAME_TIMEOUT_MINUTES
 from word_duel.constants import (
+    END_REASON_TIMEOUT,
     MODE_SOLO,
     OTHER_ROLE,
     ROLE_A,
@@ -11,6 +13,7 @@ from word_duel.constants import (
 )
 from word_duel.game_logic import EMOJI, GREEN, is_win, render_feedback
 from word_duel.html import bold, code, esc, italic
+from word_duel.timer import format_countdown, seconds_remaining
 
 
 PARTY = "🎉 🎊 🥳 ✨ 🏆 ✨ 🥳 🎊 🎉"
@@ -97,6 +100,20 @@ def _header(game):
     return f"⚔️ {bold('Word Duel')}  ·  {length} letters"
 
 
+def _timer_line(game):
+    if game["status"] == STATUS_FINISHED:
+        if game.get("end_reason") == END_REASON_TIMEOUT:
+            return italic(f"⏱  Time's up — {GAME_TIMEOUT_MINUTES} minute limit")
+        return ""
+    remaining = seconds_remaining(game)
+    if remaining is None:
+        return ""
+    clock = format_countdown(remaining)
+    if remaining <= 60:
+        return f"⏱  {bold(clock)} left  ⚠️"
+    return f"⏱  {bold(clock)} left"
+
+
 def _round_line(game):
     a = game["players"].get(ROLE_A, {}).get("guesses_made", 0)
     b = game["players"].get(ROLE_B, {}).get("guesses_made", 0)
@@ -142,7 +159,11 @@ def _turn_block(game):
 
 
 def _setup_body(game):
-    lines = [_header(game), _vs_line(game), ""]
+    lines = [_header(game), _vs_line(game)]
+    timer = _timer_line(game)
+    if timer:
+        lines.append(timer)
+    lines.append("")
     if ROLE_B not in game["players"]:
         host = game["players"][ROLE_A]
         lines.append("▶ Playing: " + italic("waiting for opponent to join"))
@@ -170,14 +191,16 @@ def _setup_body(game):
 
 
 def _progress_body(game):
-    lines = [
-        _header(game),
-        _vs_line(game),
+    lines = [_header(game), _vs_line(game)]
+    timer = _timer_line(game)
+    if timer:
+        lines.append(timer)
+    lines.extend([
         "",
         _turn_block(game),
         "",
         _player_board(game, ROLE_A),
-    ]
+    ])
     if not _is_solo(game):
         lines.extend(["", _player_board(game, ROLE_B)])
     return "\n".join(lines)
@@ -187,9 +210,20 @@ def _result_banner(game):
     cap = game.get("max_rounds", 10)
     a = game["players"][ROLE_A]
     b = game["players"][ROLE_B]
+    timed_out = game.get("end_reason") == END_REASON_TIMEOUT
+
     if _is_solo(game):
         secret = b.get("secret_word") or "?"
         guesses = a.get("guesses_made", 0)
+        if timed_out:
+            return [
+                "⏱  " + bold("TIME'S UP"),
+                LOSS_ROW,
+                "💔  " + bold("YOU LOST"),
+                f"The word was {code(secret)}",
+                italic(f"😢  {guesses}/{cap} guesses used"),
+                LOSS_ROW,
+            ]
         if game.get("winner") == ROLE_A:
             emoji, title = _cheer(guesses)
             return [
@@ -209,6 +243,14 @@ def _result_banner(game):
 
     winner = game.get("winner")
     if winner == "draw":
+        if timed_out:
+            return [
+                "⏱  " + bold("TIME'S UP"),
+                DRAW_ROW,
+                "🤝  " + bold("DRAW"),
+                italic(f"{GAME_TIMEOUT_MINUTES} minute limit reached"),
+                DRAW_ROW,
+            ]
         if a.get("solved") and b.get("solved"):
             n = a.get("guesses_made", 0)
             return [

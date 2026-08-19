@@ -2,12 +2,13 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from word_duel.constants import MODE_SOLO, ROLE_B, STATUS_FINISHED, STATUS_IN_PROGRESS, STATUS_SETUP
 
-# Exactly 4 rows: 3 of letters, last row is V–Z plus actions.
+# Standard QWERTY order, split into rows of ≤8 so Telegram mobile does not clip keys.
+_QWERTY = "QWERTYUIOPASDFGHJKLZXCVBNM"
+_MAX_KEYS_PER_ROW = 8
+
 LETTER_ROWS = [
-    list("ABCDEFG"),
-    list("HIJKLMN"),
-    list("OPQRSTU"),
-    list("VWXYZ"),
+    list(_QWERTY[i : i + _MAX_KEYS_PER_ROW])
+    for i in range(0, len(_QWERTY), _MAX_KEYS_PER_ROW)
 ]
 
 

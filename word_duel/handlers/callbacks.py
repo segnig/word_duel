@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from word_duel import db, duel, texts
 from word_duel.card import format_draft, render_card
 from word_duel.config import DEFAULT_WORD_LENGTH
-from word_duel.constants import ROLE_A, ROLE_B
+from word_duel.constants import END_REASON_TIMEOUT, ROLE_A, ROLE_B
 from word_duel.html import PARSE_MODE
 from word_duel.handlers.card import game_id_from_query, refresh_card
 from word_duel.keyboards import game_keyboard
@@ -75,6 +75,19 @@ async def handle_solo(query, context):
     game["message_id"] = sent.message_id
     game["host_chat_id"] = message.chat.id
     db.save_game(game)
+
+
+async def _ensure_playable(query, game):
+    if duel.touch_game(game):
+        return True
+    msg = (
+        texts.timeout_alert()
+        if game and game.get("end_reason") == END_REASON_TIMEOUT
+        else "This game is over."
+    )
+    await query.answer(msg, show_alert=True)
+    await refresh_card(game, query=query)
+    return False
 
 
 async def handle_join(query, game):
@@ -193,6 +206,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     if not game:
         await query.answer("No active game. Send a new one with @bot or /newduel.", show_alert=True)
+        return
+
+    if not await _ensure_playable(query, game):
         return
 
     if data == "join" or data.startswith("join:"):

@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 
 from word_duel import db, duel, texts
 from word_duel.card import render_card
-from word_duel.constants import STATUS_IN_PROGRESS, STATUS_SETUP
+from word_duel.constants import END_REASON_TIMEOUT, STATUS_IN_PROGRESS, STATUS_SETUP
 from word_duel.game_logic import is_valid_word, normalize_word
 from word_duel.handlers.card import refresh_card
 from word_duel.handlers.common import (
@@ -103,7 +103,17 @@ async def word(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def guess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     game = db.get_game(chat_id)
-    if not game or game["status"] != STATUS_IN_PROGRESS:
+    if not game or not duel.touch_game(game):
+        await update.message.reply_text(
+            texts.game_timed_out()
+            if game and game.get("end_reason") == END_REASON_TIMEOUT
+            else texts.no_active_duel()
+        )
+        if game:
+            await refresh_card(game, bot=context.bot)
+        return
+
+    if game["status"] != STATUS_IN_PROGRESS:
         await update.message.reply_text(texts.no_active_duel())
         return
 

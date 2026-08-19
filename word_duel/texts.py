@@ -1,5 +1,6 @@
 """User-facing copy. Keep Telegram handlers free of long string literals."""
 
+from word_duel.config import GAME_TIMEOUT_MINUTES
 from word_duel.constants import OTHER_ROLE
 
 
@@ -16,6 +17,7 @@ def start_help(bot_username="wordduelbot"):
         f"• <code>@{bot_username}</code> — pick length &amp; word on buttons\n\n"
         f"<b>Rules</b>\n"
         f"Both players get the same number of guesses.\n"
+        f"Each game has a {GAME_TIMEOUT_MINUTES}-minute countdown.\n"
         f"Each player has 2 private hints.\n"
         f"Your secret stays in a popup — the chat never sees it.\n\n"
         f"Or add me to a group and send /newduel"
@@ -30,6 +32,7 @@ def how_to_play():
         "3. In a duel, each locks a secret word (popup only)\n"
         "4. Tap letters → <b>Enter</b> to guess\n"
         "5. 🟩 right spot · 🟨 in the word · ⬜ no\n\n"
+        f"Each game lasts {GAME_TIMEOUT_MINUTES} minutes.\n"
         "If you find it first in a duel, they still get an equal guess.\n"
         "<b>💡 Hint</b> — 2 times, only you see it."
     )
@@ -133,6 +136,14 @@ def guess_usage(word_length):
 
 def not_your_turn(name):
     return f"It's not your turn — waiting on {name}."
+
+
+def game_timed_out():
+    return f"⏱ Time's up! This game had a {GAME_TIMEOUT_MINUTES}-minute limit."
+
+
+def timeout_alert():
+    return f"⏱ TIME'S UP\n{GAME_TIMEOUT_MINUTES}-minute limit reached"
 
 
 def _cheer_title(guesses):
